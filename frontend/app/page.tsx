@@ -16,8 +16,11 @@ import {
   formatAnalysisForDisplay, 
   validateImageFile,
   generateSessionId,
-  type AnalysisResult 
+  generateConsultation,
+  type AnalysisResult,
+  type ConsultationResponse as ConsultationResponseType
 } from "@/lib/api-client"
+import { ConsultationDisplay, type ConsultationResponse } from "@/components/consultation-display"
 
 export default function BioLensHome() {
   const [file, setFile] = useState<File | null>(null)
@@ -30,6 +33,11 @@ export default function BioLensHome() {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [uploadedPublicId, setUploadedPublicId] = useState<string | null>(null)
   const [sessionId] = useState<string>(() => generateSessionId())
+  
+  // Consultation state
+  const [consultation, setConsultation] = useState<ConsultationResponse | null>(null)
+  const [isConsultationLoading, setIsConsultationLoading] = useState(false)
+  const [consultationError, setConsultationError] = useState<string | null>(null)
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -69,6 +77,8 @@ export default function BioLensHome() {
     setFormattedResult(null)
     setUploadedImageUrl(null)
     setUploadedPublicId(null)
+    setConsultation(null)
+    setConsultationError(null)
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,6 +118,9 @@ export default function BioLensHome() {
         setAnalysisResult(analysisResponse.analysis)
         setFormattedResult(formatAnalysisForDisplay(analysisResponse.analysis))
         console.log('✅ Analysis completed successfully')
+        
+        // Step 3: Automatically generate consultation
+        await generateConsultationForAnalysis(analysisResponse.analysis, symptoms)
       } else {
         throw new Error(analysisResponse.error || 'Analysis failed')
       }
@@ -120,6 +133,43 @@ export default function BioLensHome() {
     } finally {
       setIsProcessing(false)
     }
+  }
+
+  const generateConsultationForAnalysis = async (analysis: AnalysisResult, currentSymptoms: string) => {
+    setIsConsultationLoading(true)
+    setConsultationError(null)
+    
+    try {
+      console.log('🤖 Generating AI consultation...')
+      const consultationResponse = await generateConsultation(analysis, currentSymptoms, sessionId)
+      
+      if (consultationResponse.success && consultationResponse.consultation) {
+        // Convert API response to component format
+        const consultationData: ConsultationResponse = {
+          consultation: consultationResponse.consultation,
+          metadata: consultationResponse.metadata!,
+          emergencyContacts: consultationResponse.emergencyContacts
+        }
+        setConsultation(consultationData)
+        console.log('✅ Consultation generated successfully')
+      } else if (consultationResponse.fallbackConsultation) {
+        // Handle fallback consultation
+        setConsultation(consultationResponse.fallbackConsultation)
+        console.log('✅ Fallback consultation provided')
+      } else {
+        throw new Error(consultationResponse.error || 'Failed to generate consultation')
+      }
+    } catch (error) {
+      console.error('❌ Consultation generation failed:', error)
+      setConsultationError(error instanceof Error ? error.message : 'Failed to generate consultation')
+    } finally {
+      setIsConsultationLoading(false)
+    }
+  }
+
+  const handleRegenerateConsultation = async () => {
+    if (!analysisResult) return
+    await generateConsultationForAnalysis(analysisResult, symptoms)
   }
 
   return (
@@ -416,6 +466,16 @@ export default function BioLensHome() {
                   </div>
                 )}
 
+                {/* AI Consultation Section */}
+                <div className="mb-8">
+                  <ConsultationDisplay
+                    consultation={consultation}
+                    isLoading={isConsultationLoading}
+                    error={consultationError}
+                    onRegenerate={handleRegenerateConsultation}
+                  />
+                </div>
+
                 <div className="prose prose-sm max-w-none">
                   <div className="bg-gradient-to-br from-muted/30 to-muted/50 rounded-2xl p-8 whitespace-pre-line text-sm leading-relaxed border border-border/50 shadow-inner">
                     {formattedResult}
@@ -443,6 +503,8 @@ export default function BioLensHome() {
                       setSymptoms("")
                       setUploadedImageUrl(null)
                       setUploadedPublicId(null)
+                      setConsultation(null)
+                      setConsultationError(null)
                     }}
                     variant="outline"
                     className="flex-1 h-12 font-semibold border-2 hover:bg-muted/50 transition-all duration-300"

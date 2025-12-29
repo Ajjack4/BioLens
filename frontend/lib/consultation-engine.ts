@@ -6,6 +6,9 @@
 
 import { AnalysisResult, DetectedCondition } from './api-client'
 import { GeminiAPIClient, GeminiRequest, GeminiResponse } from './gemini-client'
+import { getMedicalPromptBuilder } from './medical-prompt-builder'
+import { getResponseProcessor, processGeminiResponse } from './response-processor'
+import { getOfflineConsultationEngine, generateOfflineConsultation } from './offline-consultation'
 
 export interface ConsultationInput {
   analysisResult: AnalysisResult
@@ -121,10 +124,12 @@ export class ConsultationEngine {
   private circuitBreaker: CircuitBreaker
   private errorHistory: Array<{ timestamp: number; error: string; category: string }> = []
   private maxErrorHistory: number = 100
+  private promptBuilder: ReturnType<typeof getMedicalPromptBuilder>
 
   constructor(geminiClient: GeminiAPIClient) {
     this.geminiClient = geminiClient
     this.circuitBreaker = new CircuitBreaker(5, 60000) // 5 failures, 1 minute recovery
+    this.promptBuilder = getMedicalPromptBuilder()
   }
 
   /**
@@ -476,23 +481,36 @@ export class ConsultationEngine {
   }
 
   /**
-   * Creates a consultation request for Gemini API
+   * Creates a consultation request for Gemini API using MedicalPromptBuilder
    */
   private createConsultationRequest(
     structuredData: any,
     riskLevel: RiskLevel,
     input: ConsultationInput
   ): any {
-    // Basic prompt construction (will be enhanced with MedicalPromptBuilder)
-    const prompt = this.createBasicPrompt(structuredData, riskLevel, input)
+    // Use the medical prompt builder to create a proper medical consultation prompt
+    const promptResult = this.promptBuilder.buildConsultationPromptWithRiskAssessment(
+      structuredData.predictions,
+      input.symptoms,
+      riskLevel,
+      input.analysisResult
+    )
+    
+    // Validate the prompt for safety and completeness
+    const validation = this.promptBuilder.validatePrompt(promptResult)
+    if (!validation.valid) {
+      console.warn('Prompt validation issues:', validation.issues)
+    }
     
     return {
-      prompt,
-      systemInstruction: this.getSystemInstruction(),
+      prompt: promptResult.userPrompt,
+      systemInstruction: promptResult.systemInstruction,
       context: {
         sessionId: input.sessionId,
         timestamp: input.timestamp,
-        riskLevel: riskLevel.level
+        riskLevel: riskLevel.level,
+        highRiskAssessment: promptResult.highRiskAssessment,
+        safetyInstructions: promptResult.safetyInstructions
       }
     }
   }
@@ -546,9 +564,24 @@ export class ConsultationEngine {
   }
 
   /**
-   * Processes Gemini API response into consultation format
+   * Processes Gemini API response into consultation format using ResponseProcessor
    */
-  private processGeminiResponse(response: any, input: ConsultationInput): ConsultationResponse {
+  private async processGeminiResponse(response: GeminiResponse, input: ConsultationInput): Promise<ConsultationResponse> {
+    try {
+      // Use the dedicated ResponseProcessor for safety validation and formatting
+      return await processGeminiResponse(response, input)
+    } catch (error) {
+      console.error('Response processing failed:', error)
+      
+      // Fallback to basic processing if ResponseProcessor fails
+      return this.processGeminiResponseBasic(response, input)
+    }
+  }
+
+  /**
+   * Basic response processing as fallback
+   */
+  private processGeminiResponseBasic(response: any, input: ConsultationInput): ConsultationResponse {
     const content = response.content || ''
     
     // Parse structured response (basic implementation)
@@ -863,17 +896,33 @@ export class ConsultationEngine {
   /**
    * Provides enhanced consultation using existing analysis data when Gemini API is unavailable
    * Implements comprehensive fallback with error categorization and recovery strategies
+   * Now includes seamless offline consultation capabilities
    */
   handleFallback(error: Error, input: ConsultationInput): ConsultationResponse {
     const { analysisResult, symptoms } = input
-    const topPrediction = analysisResult.predictions[0]
     
     console.log('Executing fallback consultation due to:', error.message)
     
     // Categorize the error for better fallback handling
     const errorCategory = this.categorizeError(error)
     
-    // Generate enhanced fallback consultation based on analysis
+    // For network/service issues, use comprehensive offline consultation
+    if (errorCategory === 'network' || errorCategory === 'service_unavailable') {
+      console.log('Using comprehensive offline consultation system')
+      try {
+        return generateOfflineConsultation(analysisResult, symptoms, input.sessionId, {
+          includeDetailedRecommendations: true,
+          includeEducationalContent: true,
+          includeEmergencyContacts: true,
+          maxRecommendations: 8
+        })
+      } catch (offlineError) {
+        console.warn('Offline consultation failed, using enhanced fallback:', offlineError)
+      }
+    }
+    
+    // For other errors (auth, rate limit), use enhanced fallback
+    const topPrediction = analysisResult.predictions[0]
     const conditionAssessment = this.generateEnhancedFallbackAssessment(analysisResult, errorCategory)
     const symptomCorrelation = this.generateSymptomCorrelation(symptoms, analysisResult)
     const recommendations = this.generateEnhancedFallbackRecommendations(analysisResult, symptoms, errorCategory)
@@ -898,6 +947,48 @@ export class ConsultationEngine {
         safetyValidated: true
       },
       emergencyContacts: this.getEmergencyContacts(analysisResult.riskLevel)
+    }
+  }
+
+  /**
+   * Generates offline consultation using the dedicated offline system
+   * Provides seamless fallback experience with comprehensive analysis
+   */
+  generateOfflineConsultation(
+    analysisResult: AnalysisResult,
+    symptoms: string,
+    sessionId: string
+  ): ConsultationResponse {
+    console.log('Generating offline consultation for seamless fallback experience')
+    
+    try {
+      return generateOfflineConsultation(analysisResult, symptoms, sessionId, {
+        includeDetailedRecommendations: true,
+        includeEducationalContent: true,
+        includeEmergencyContacts: true,
+        maxRecommendations: 10
+      })
+    } catch (error) {
+      console.error('Offline consultation failed:', error)
+      
+      // Ultimate fallback to basic consultation
+      return this.createErrorConsultation(
+        error instanceof Error ? error : new Error('Offline consultation failed'),
+        0,
+        sessionId
+      )
+    }
+  }
+
+  /**
+   * Checks if offline consultation is available
+   */
+  isOfflineConsultationAvailable(): boolean {
+    try {
+      const offlineEngine = getOfflineConsultationEngine()
+      return !!offlineEngine
+    } catch (error) {
+      return false
     }
   }
 

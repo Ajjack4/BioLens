@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Search for old images in the biolens-uploads folder
     const searchResult = await cloudinary.search
       .expression(`folder:biolens-uploads AND created_at<${cutoffDate.toISOString()}`)
-      .sort_by([['created_at', 'desc']])
+      .sort_by('created_at', 'desc')
       .max_results(100)
       .execute()
     

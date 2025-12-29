@@ -84,6 +84,40 @@ export interface CleanupResponse {
   totalFound?: number
 }
 
+export interface ConsultationRequest {
+  analysisResult: AnalysisResult
+  symptoms: string
+  sessionId: string
+}
+
+export interface ConsultationResponse {
+  success: boolean
+  consultation?: {
+    conditionAssessment: string
+    symptomCorrelation: string
+    recommendations: string[]
+    urgencyLevel: 'immediate' | 'within_week' | 'routine' | 'monitor'
+    educationalInfo: string
+    medicalDisclaimer: string
+  }
+  metadata?: {
+    modelUsed: string
+    processingTime: number
+    confidenceScore: number
+    fallbackUsed: boolean
+    safetyValidated: boolean
+  }
+  emergencyContacts?: Array<{
+    type: 'emergency' | 'urgent_care' | 'dermatologist'
+    name: string
+    phone: string
+    description: string
+  }>
+  sessionId?: string
+  error?: string
+  fallbackConsultation?: any
+}
+
 /**
  * Upload image to Cloudinary via Next.js API
  */
@@ -146,6 +180,43 @@ export async function analyzeSkinCondition(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Analysis failed'
+    }
+  }
+}
+
+/**
+ * Generate medical consultation using Gemini AI
+ */
+export async function generateConsultation(
+  analysisResult: AnalysisResult,
+  symptoms: string = '',
+  sessionId?: string
+): Promise<ConsultationResponse> {
+  try {
+    const response = await fetch('/api/consultation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        analysisResult,
+        symptoms,
+        sessionId: sessionId || generateSessionId()
+      }),
+    })
+
+    const result: ConsultationResponse = await response.json()
+
+    if (!response.ok && !result.consultation) {
+      throw new Error(result.error || 'Consultation generation failed')
+    }
+
+    return result
+  } catch (error) {
+    console.error('Consultation error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Consultation generation failed'
     }
   }
 }
