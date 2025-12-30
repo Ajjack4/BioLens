@@ -8,7 +8,8 @@ The system follows a microservices architecture with clean separation between:
 
 - **Frontend (Next.js)**: Conversational chat interface with image upload
 - **Backend (FastAPI)**: API gateway and orchestration layer
-- **BioBERT Service**: Medical entity extraction and symptom analysis
+- **BioMed Clip Service**: Medical Image extraction and symptom analysis
+- **Fusion Classifier**: Classify on embedded image and text
 - **Image Analysis Service**: Computer vision for medical image analysis
 - **Redis**: Session management and caching
 
@@ -48,7 +49,7 @@ The system follows a microservices architecture with clean separation between:
 4. **Access the services**
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:8000
-   - BioBERT Service: http://localhost:8001
+   - BioMed & Fusion Classifier Service: http://localhost:8001
    - Image Analysis Service: http://localhost:8002
    - API Documentation: http://localhost:8000/docs
 
