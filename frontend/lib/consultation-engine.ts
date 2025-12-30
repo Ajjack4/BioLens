@@ -172,8 +172,9 @@ export class ConsultationEngine {
         consultationResult = await this.circuitBreaker.execute(async () => {
           return await this.generateGeminiConsultation(structuredData, riskLevel, consultationInput)
         })
+        console.log('✅ Gemini consultation generated successfully')
       } catch (error) {
-        console.warn('Gemini consultation failed, using fallback:', error)
+        console.warn('⚠️ Gemini consultation failed, using fallback:', error)
         this.recordError(error as Error)
         consultationResult = this.handleFallback(error as Error, consultationInput)
         fallbackUsed = true
@@ -569,9 +570,11 @@ export class ConsultationEngine {
   private async processGeminiResponse(response: GeminiResponse, input: ConsultationInput): Promise<ConsultationResponse> {
     try {
       // Use the dedicated ResponseProcessor for safety validation and formatting
-      return await processGeminiResponse(response, input)
+      const processedResponse = await processGeminiResponse(response, input)
+      console.log('✅ Response processed successfully with safety validation')
+      return processedResponse
     } catch (error) {
-      console.error('Response processing failed:', error)
+      console.error('⚠️ Response processing failed, using basic processing:', error)
       
       // Fallback to basic processing if ResponseProcessor fails
       return this.processGeminiResponseBasic(response, input)

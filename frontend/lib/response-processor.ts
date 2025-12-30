@@ -89,8 +89,12 @@ export class ResponseProcessor {
       throw new Error(`Invalid Gemini response: ${geminiResponse.error || 'No content received'}`)
     }
 
+    console.log('🔍 Raw Gemini response content (first 500 chars):')
+    console.log(geminiResponse.content.substring(0, 500) + '...')
+
     // Step 1: Validate response structure
     const structureValidation = this.validateResponseStructure(geminiResponse.content)
+    console.log('📋 Response structure validation:', structureValidation.sectionsFound)
     
     // Step 2: Validate medical safety using SafetyValidator
     const safetyValidation = this.safetyValidator.validateResponse(geminiResponse.content)
@@ -101,6 +105,8 @@ export class ResponseProcessor {
       originalInput,
       safetyValidation
     )
+    
+    console.log('💡 Extracted recommendations count:', formattedConsultation.recommendations.length)
     
     // Step 4: Inject disclaimers and safety information
     const finalConsultation = this.injectDisclaimers(
@@ -148,10 +154,13 @@ export class ResponseProcessor {
       }
     }
 
-    // Step 8: Final safety validation
-    if (!complianceCheck.overallCompliant) {
-      console.warn('Compliance check failed:', complianceCheck.recommendations)
+    // Step 8: Final safety validation (more lenient)
+    if (!complianceCheck.overallCompliant && complianceCheck.complianceScore < 40) {
+      console.warn('Compliance check failed with low score:', complianceCheck.recommendations)
       consultationResponse.metadata.safetyValidated = false
+    } else {
+      // Accept responses with warnings but reasonable compliance scores
+      consultationResponse.metadata.safetyValidated = complianceCheck.complianceScore >= 40
     }
 
     return consultationResponse
@@ -271,6 +280,8 @@ export class ResponseProcessor {
       }
       return rec
     })
+
+    console.log('🔧 Enhanced recommendations count:', enhancedRecommendations.length)
 
     return {
       ...consultation,

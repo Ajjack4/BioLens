@@ -17,10 +17,17 @@ import {
   validateImageFile,
   generateSessionId,
   generateConsultation,
+  analyzeDemoSample,
+  createFileFromDemoSample,
+  isDemoFile,
+  getDemoSampleFromFile,
   type AnalysisResult,
-  type ConsultationResponse as ConsultationResponseType
+  type ConsultationResponse as ConsultationResponseType,
+  type DemoSample
 } from "@/lib/api-client"
 import { ConsultationDisplay, type ConsultationResponse } from "@/components/consultation-display"
+import { DemoSamples } from "@/components/demo-samples"
+import { DemoBanner } from "@/components/demo-banner"
 import {
   addConsultationToHistory,
   getConsultationHistory,
@@ -40,6 +47,7 @@ export default function BioLensHome() {
   const [uploadedPublicId, setUploadedPublicId] = useState<string | null>(null)
   const [sessionId] = useState<string>(() => generateSessionId())
   const analysisRef = useRef<HTMLDivElement | null>(null)
+  const demoRef = useRef<HTMLDivElement | null>(null)
 
   // Consultation state
   const [consultation, setConsultation] = useState<ConsultationResponse | null>(null)
@@ -107,43 +115,69 @@ export default function BioLensHome() {
       analysisRef.current?.scrollIntoView({ behavior: "smooth" })
     }, 200)
 
-
     try {
-      // Step 1: Upload image to Cloudinary
-      console.log('📤 Uploading image to Cloudinary...')
-      const uploadResponse = await uploadImage(file)
+      // Check if this is a demo sample
+      const demoSample = getDemoSampleFromFile(file)
+      
+      if (demoSample) {
+        // Handle demo sample analysis
+        console.log('🎭 Processing demo sample:', demoSample.name)
+        
+        const demoResponse = await analyzeDemoSample(
+          demoSample.id,
+          symptoms,
+          sessionId
+        )
 
-      if (!uploadResponse.success || !uploadResponse.imageUrl) {
-        throw new Error(uploadResponse.error || 'Failed to upload image')
-      }
+        if (demoResponse.success && demoResponse.analysis) {
+          setAnalysisResult(demoResponse.analysis)
+          setFormattedResult(formatAnalysisForDisplay(demoResponse.analysis))
+          setUploadedImageUrl(demoSample.imageUrl) // Use demo image URL
+          console.log('✅ Demo analysis completed successfully')
 
-      console.log('✅ Image uploaded successfully:', uploadResponse.imageUrl)
-      setUploadedImageUrl(uploadResponse.imageUrl)
-      setUploadedPublicId(uploadResponse.publicId || null)
-
-      // Step 2: Analyze the uploaded image
-      console.log('🔬 Starting analysis...')
-      const analysisResponse = await analyzeSkinCondition(
-        uploadResponse.imageUrl,
-        symptoms,
-        sessionId
-      )
-
-      if (analysisResponse.analysis) {
-        setAnalysisResult(analysisResponse.analysis)
-        setFormattedResult(formatAnalysisForDisplay(analysisResponse.analysis))
-        console.log('✅ Analysis completed successfully')
-
-        // Step 3: Automatically generate consultation
-        await generateConsultationForAnalysis(analysisResponse.analysis, symptoms)
-        setTimeout(() => {
-          analysisRef.current?.scrollIntoView({ behavior: "smooth" })
-        }, 400)
-
+          // Step 3: Automatically generate consultation
+          await generateConsultationForAnalysis(demoResponse.analysis, symptoms)
+          setTimeout(() => {
+            analysisRef.current?.scrollIntoView({ behavior: "smooth" })
+          }, 400)
+        } else {
+          throw new Error(demoResponse.error || 'Demo analysis failed')
+        }
       } else {
-        throw new Error(analysisResponse.error || 'Analysis failed')
-      }
+        // Handle regular file upload and analysis
+        console.log('📤 Uploading image to Cloudinary...')
+        const uploadResponse = await uploadImage(file)
 
+        if (!uploadResponse.success || !uploadResponse.imageUrl) {
+          throw new Error(uploadResponse.error || 'Failed to upload image')
+        }
+
+        console.log('✅ Image uploaded successfully:', uploadResponse.imageUrl)
+        setUploadedImageUrl(uploadResponse.imageUrl)
+        setUploadedPublicId(uploadResponse.publicId || null)
+
+        // Step 2: Analyze the uploaded image
+        console.log('🔬 Starting analysis...')
+        const analysisResponse = await analyzeSkinCondition(
+          uploadResponse.imageUrl,
+          symptoms,
+          sessionId
+        )
+
+        if (analysisResponse.analysis) {
+          setAnalysisResult(analysisResponse.analysis)
+          setFormattedResult(formatAnalysisForDisplay(analysisResponse.analysis))
+          console.log('✅ Analysis completed successfully')
+
+          // Step 3: Automatically generate consultation
+          await generateConsultationForAnalysis(analysisResponse.analysis, symptoms)
+          setTimeout(() => {
+            analysisRef.current?.scrollIntoView({ behavior: "smooth" })
+          }, 400)
+        } else {
+          throw new Error(analysisResponse.error || 'Analysis failed')
+        }
+      }
     } catch (error) {
       console.error('❌ Analysis failed:', error)
       setFormattedResult(
@@ -151,6 +185,39 @@ export default function BioLensHome() {
       )
     } finally {
       setIsProcessing(false)
+    }
+  }
+
+  const handleScrollToDemo = () => {
+    demoRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  const handleSelectDemoSample = async (sample: DemoSample) => {
+    try {
+      console.log('🎭 Selected demo sample:', sample.name)
+      
+      // Create a mock file from the demo sample
+      const demoFile = await createFileFromDemoSample(sample)
+      
+      // Set the file and preview
+      setFile(demoFile)
+      setPreview(sample.imageUrl)
+      setSymptoms(sample.symptoms)
+      
+      // Reset previous results
+      setAnalysisResult(null)
+      setFormattedResult(null)
+      setUploadedImageUrl(null)
+      setUploadedPublicId(null)
+      setConsultation(null)
+      setConsultationError(null)
+      setConsultationHistory([])
+      setIsRegenerating(false)
+      
+      console.log('✅ Demo sample loaded successfully')
+    } catch (error) {
+      console.error('❌ Failed to load demo sample:', error)
+      alert('Failed to load demo sample. Please try again.')
     }
   }
 
@@ -390,6 +457,17 @@ export default function BioLensHome() {
           </div>
         </section>
 
+        {/* Demo Banner */}
+        <DemoBanner onScrollToDemo={handleScrollToDemo} />
+
+        {/* Demo Samples Section */}
+        <div ref={demoRef}>
+          <DemoSamples 
+            onSelectSample={handleSelectDemoSample}
+            isProcessing={isProcessing}
+          />
+        </div>
+
         {/* Upload Section */}
         <section className="mb-20">
           <Card className="max-w-4xl mx-auto p-10 bg-gradient-to-br from-card via-card to-card/80 border-2 border-border/50 shadow-xl backdrop-blur-sm">
@@ -564,8 +642,8 @@ export default function BioLensHome() {
                 <div className="mt-8 flex flex-col sm:flex-row gap-4">
                   <Button
                     onClick={async () => {
-                      // Clean up uploaded image if it exists
-                      if (uploadedPublicId) {
+                      // Clean up uploaded image if it exists (not for demo samples)
+                      if (uploadedPublicId && !isDemoFile(file!)) {
                         try {
                           await cleanupImage(uploadedPublicId)
                           console.log('🗑️ Image cleaned up from Cloudinary')

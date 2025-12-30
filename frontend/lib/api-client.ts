@@ -933,9 +933,164 @@ export function generateSessionId(): string {
 }
 
 /**
+ * Demo sample interface for testing functionality
+ */
+export interface DemoSample {
+  id: string
+  name: string
+  description: string
+  imageUrl: string
+  symptoms: string
+  expectedCondition: string
+  riskLevel: 'low' | 'medium' | 'high'
+  category: string
+  processingTime: string
+}
+
+/**
+ * Demo analysis response interface
+ */
+export interface DemoAnalysisResponse {
+  success: boolean
+  analysis?: AnalysisResult
+  metadata?: {
+    isDemoMode: boolean
+    sampleId: string
+    processingTime: number
+    timestamp: string
+  }
+  error?: string
+}
+
+/**
+ * Analyze demo sample with predefined results
+ */
+export async function analyzeDemoSample(
+  sampleId: string,
+  symptoms: string = '',
+  sessionId?: string
+): Promise<DemoAnalysisResponse> {
+  try {
+    console.log(`🎭 Analyzing demo sample: ${sampleId}`)
+    
+    const response = await fetch('/api/demo', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sampleId,
+        symptoms,
+        sessionId: sessionId || generateSessionId()
+      }),
+    })
+
+    const result: DemoAnalysisResponse = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Demo analysis failed')
+    }
+
+    console.log(`✅ Demo analysis completed for ${sampleId}`)
+    return result
+  } catch (error) {
+    console.error('Demo analysis error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Demo analysis failed'
+    }
+  }
+}
+
+/**
+ * Get available demo samples
+ */
+export async function getDemoSamples(): Promise<{
+  success: boolean
+  samples?: Array<{
+    id: string
+    available: boolean
+    expectedCondition: string
+    riskLevel: string
+    confidence: number
+  }>
+  totalSamples?: number
+  error?: string
+}> {
+  try {
+    const response = await fetch('/api/demo', {
+      method: 'GET',
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to fetch demo samples')
+    }
+
+    return result
+  } catch (error) {
+    console.error('Demo samples fetch error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch demo samples'
+    }
+  }
+}
+
+/**
+ * Create a File object from a demo sample URL for consistent processing
+ */
+export async function createFileFromDemoSample(sample: DemoSample): Promise<File> {
+  try {
+    // For demo purposes, create a mock file object
+    // In a real implementation, you might fetch the image and create a proper File
+    const mockFile = new File(
+      [new Blob(['demo-image-data'], { type: 'image/jpeg' })],
+      `${sample.id}.jpg`,
+      { type: 'image/jpeg' }
+    )
+    
+    // Add demo metadata to the file object
+    Object.defineProperty(mockFile, 'demoSample', {
+      value: sample,
+      writable: false,
+      enumerable: false
+    })
+    
+    return mockFile
+  } catch (error) {
+    console.error('Error creating demo file:', error)
+    throw new Error('Failed to create demo file')
+  }
+}
+
+/**
+ * Check if a file is a demo sample
+ */
+export function isDemoFile(file: File): boolean {
+  return 'demoSample' in file
+}
+
+/**
+ * Get demo sample from file if it's a demo file
+ */
+export function getDemoSampleFromFile(file: File): DemoSample | null {
+  if (isDemoFile(file)) {
+    return (file as any).demoSample
+  }
+  return null
+}
+
+/**
  * Validate image file before upload
  */
 export function validateImageFile(file: File): { valid: boolean; error?: string } {
+  // Skip validation for demo files
+  if (isDemoFile(file)) {
+    return { valid: true }
+  }
+
   // Check file type
   if (!file.type.startsWith('image/')) {
     return { valid: false, error: 'File must be an image' }

@@ -85,7 +85,7 @@ export class GeminiAPIClient {
     // Default configuration optimized for medical consultation
     this.config = {
       apiKey: process.env.GEMINI_API_KEY || '',
-      model: 'gemini-1.5-pro',
+      model: 'models/gemini-2.5-flash', // Use available model with full path
       temperature: 0.3, // Lower temperature for medical consistency
       maxTokens: 2048,
       timeout: 30000, // 30 seconds timeout
@@ -310,8 +310,13 @@ export class GeminiAPIClient {
         const resultPromise = this.model.generateContent(fullPrompt)
         const result = await Promise.race([resultPromise, timeoutPromise])
         
-        const response = await result.response
+        const response = result.response
         const content = response.text()
+
+        // Validate that we got actual content
+        if (!content || content.trim().length === 0) {
+          throw new Error('Gemini API returned empty response')
+        }
 
         const processingTime = Date.now() - startTime
 
