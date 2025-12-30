@@ -2,18 +2,18 @@
 
 import type React from "react"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Upload, AlertCircle, CheckCircle2, Loader2, Brain, Stethoscope, Shield, Zap, Activity } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { SymptomInput } from "@/components/symptom-input"
 import { AnalysisPieChart } from "@/components/analysis-pie-chart"
-import { 
-  uploadImage, 
-  analyzeSkinCondition, 
-  cleanupImage, 
-  formatAnalysisForDisplay, 
+import {
+  uploadImage,
+  analyzeSkinCondition,
+  cleanupImage,
+  formatAnalysisForDisplay,
   validateImageFile,
   generateSessionId,
   generateConsultation,
@@ -21,11 +21,11 @@ import {
   type ConsultationResponse as ConsultationResponseType
 } from "@/lib/api-client"
 import { ConsultationDisplay, type ConsultationResponse } from "@/components/consultation-display"
-import { 
-  addConsultationToHistory, 
-  getConsultationHistory, 
+import {
+  addConsultationToHistory,
+  getConsultationHistory,
   getConsultationById,
-  type ConsultationHistoryEntry 
+  type ConsultationHistoryEntry
 } from "@/lib/consultation-history"
 
 export default function BioLensHome() {
@@ -39,7 +39,8 @@ export default function BioLensHome() {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [uploadedPublicId, setUploadedPublicId] = useState<string | null>(null)
   const [sessionId] = useState<string>(() => generateSessionId())
-  
+  const analysisRef = useRef<HTMLDivElement | null>(null)
+
   // Consultation state
   const [consultation, setConsultation] = useState<ConsultationResponse | null>(null)
   const [isConsultationLoading, setIsConsultationLoading] = useState(false)
@@ -102,12 +103,16 @@ export default function BioLensHome() {
     if (!file) return
 
     setIsProcessing(true)
+    setTimeout(() => {
+      analysisRef.current?.scrollIntoView({ behavior: "smooth" })
+    }, 200)
+
 
     try {
       // Step 1: Upload image to Cloudinary
       console.log('📤 Uploading image to Cloudinary...')
       const uploadResponse = await uploadImage(file)
-      
+
       if (!uploadResponse.success || !uploadResponse.imageUrl) {
         throw new Error(uploadResponse.error || 'Failed to upload image')
       }
@@ -119,18 +124,22 @@ export default function BioLensHome() {
       // Step 2: Analyze the uploaded image
       console.log('🔬 Starting analysis...')
       const analysisResponse = await analyzeSkinCondition(
-        uploadResponse.imageUrl, 
-        symptoms, 
+        uploadResponse.imageUrl,
+        symptoms,
         sessionId
       )
-      
+
       if (analysisResponse.analysis) {
         setAnalysisResult(analysisResponse.analysis)
         setFormattedResult(formatAnalysisForDisplay(analysisResponse.analysis))
         console.log('✅ Analysis completed successfully')
-        
+
         // Step 3: Automatically generate consultation
         await generateConsultationForAnalysis(analysisResponse.analysis, symptoms)
+        setTimeout(() => {
+          analysisRef.current?.scrollIntoView({ behavior: "smooth" })
+        }, 400)
+
       } else {
         throw new Error(analysisResponse.error || 'Analysis failed')
       }
@@ -148,11 +157,11 @@ export default function BioLensHome() {
   const generateConsultationForAnalysis = async (analysis: AnalysisResult, currentSymptoms: string, regenerationReason?: string) => {
     setIsConsultationLoading(true)
     setConsultationError(null)
-    
+
     try {
       console.log('🤖 Generating AI consultation...')
       const consultationResponse = await generateConsultation(analysis, currentSymptoms, sessionId)
-      
+
       if (consultationResponse.success && consultationResponse.consultation) {
         // Convert API response to component format
         const consultationData: ConsultationResponse = {
@@ -161,7 +170,7 @@ export default function BioLensHome() {
           emergencyContacts: consultationResponse.emergencyContacts
         }
         setConsultation(consultationData)
-        
+
         // Add to history
         const historyId = addConsultationToHistory(
           consultationResponse,
@@ -170,15 +179,15 @@ export default function BioLensHome() {
           analysis,
           regenerationReason
         )
-        
+
         // Update history state
         setConsultationHistory(getConsultationHistory(sessionId))
-        
+
         console.log('✅ Consultation generated successfully')
       } else if (consultationResponse.fallbackConsultation) {
         // Handle fallback consultation
         setConsultation(consultationResponse.fallbackConsultation)
-        
+
         // Add fallback to history
         addConsultationToHistory(
           consultationResponse.fallbackConsultation,
@@ -188,7 +197,7 @@ export default function BioLensHome() {
           regenerationReason || 'Fallback consultation used'
         )
         setConsultationHistory(getConsultationHistory(sessionId))
-        
+
         console.log('✅ Fallback consultation provided')
       } else {
         throw new Error(consultationResponse.error || 'Failed to generate consultation')
@@ -203,10 +212,10 @@ export default function BioLensHome() {
 
   const handleRegenerateConsultation = async (newSymptoms: string, reason?: string) => {
     if (!analysisResult) return
-    
+
     setIsRegenerating(true)
     setSymptoms(newSymptoms) // Update symptoms state
-    
+
     try {
       await generateConsultationForAnalysis(analysisResult, newSymptoms, reason)
     } finally {
@@ -286,7 +295,7 @@ export default function BioLensHome() {
               <span className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent"> Analysis</span>
             </h1>
             <p className="text-xl text-muted-foreground mb-8 leading-relaxed max-w-2xl mx-auto">
-              Get instant, AI-powered insights into your skin conditions with our advanced BiomedCLIP technology. 
+              Get instant, AI-powered insights into your skin conditions with our advanced BiomedCLIP technology.
               Upload an image and receive professional-grade analysis in seconds.
             </p>
             <div className="flex flex-wrap justify-center gap-4 text-sm text-muted-foreground">
@@ -393,11 +402,10 @@ export default function BioLensHome() {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`relative border-2 border-dashed rounded-2xl p-12 text-center transition-all duration-300 ${
-                isDragging
-                  ? "border-primary bg-primary/5 scale-[1.02] shadow-lg"
-                  : "border-border/60 hover:border-primary/50 bg-muted/20 hover:bg-muted/30"
-              }`}
+              className={`relative border-2 border-dashed rounded-2xl p-12 text-center transition-all duration-300 ${isDragging
+                ? "border-primary bg-primary/5 scale-[1.02] shadow-lg"
+                : "border-border/60 hover:border-primary/50 bg-muted/20 hover:bg-muted/30"
+                }`}
             >
               {/* Animated Background Pattern */}
               <div className="absolute inset-0 opacity-5 pointer-events-none overflow-hidden rounded-2xl">
@@ -419,24 +427,7 @@ export default function BioLensHome() {
                       {file ? `${(file.size / 1024).toFixed(1)} KB` : ''}
                     </p>
                   </div>
-                  <Button 
-                    onClick={handleAnalyze} 
-                    disabled={isProcessing} 
-                    size="lg" 
-                    className="w-full max-w-sm mx-auto h-14 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <Loader2 className="mr-3 h-6 w-6 animate-spin" />
-                        Analyzing with AI...
-                      </>
-                    ) : (
-                      <>
-                        <Brain className="mr-3 h-6 w-6" />
-                        Analyze with BiomedCLIP
-                      </>
-                    )}
-                  </Button>
+
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -451,8 +442,8 @@ export default function BioLensHome() {
                     <p className="text-muted-foreground">or click to browse your files</p>
                   </div>
                   <input type="file" id="file-upload" className="hidden" accept="image/*" onChange={handleFileInput} />
-                  <Button 
-                    onClick={() => document.getElementById("file-upload")?.click()} 
+                  <Button
+                    onClick={() => document.getElementById("file-upload")?.click()}
                     size="lg"
                     className="h-14 px-8 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
                   >
@@ -477,11 +468,11 @@ export default function BioLensHome() {
               )}
             </div>
 
-            
+
 
             {/* Symptom Input Section */}
             <div className="mt-8">
-              <SymptomInput 
+              <SymptomInput
                 symptoms={symptoms}
                 onSymptomsChange={setSymptoms}
                 disabled={isProcessing}
@@ -493,6 +484,28 @@ export default function BioLensHome() {
                 <strong className="text-primary">Privacy Guaranteed:</strong> Your images are processed securely using advanced encryption and are never stored on our servers. All analysis happens in real-time and data is immediately discarded after processing.
               </AlertDescription>
             </Alert>
+            {/* Analyze Button BELOW Symptoms */}
+            <div className="mt-6 flex justify-center">
+              <Button
+                onClick={handleAnalyze}
+                disabled={isProcessing || !file}
+                size="lg"
+                className="h-14 px-10 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="mr-3 h-6 w-6 animate-spin" />
+                    Analyzing with AI...
+                  </>
+                ) : (
+                  <>
+                    <Brain className="mr-3 h-6 w-6" />
+                    Analyze with BiomedCLIP
+                  </>
+                )}
+              </Button>
+            </div>
+
           </Card>
         </section>
 
@@ -508,6 +521,14 @@ export default function BioLensHome() {
                 <p className="text-muted-foreground">AI-powered insights from BiomedCLIP technology</p>
               </div>
             </div>
+            {isProcessing && (
+              <div className="flex flex-col items-center justify-center py-20">
+                <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
+                <p className="text-muted-foreground text-sm">
+                  BiomedCLIP is analyzing your image...
+                </p>
+              </div>
+            )}
 
             {formattedResult ? (
               <>
@@ -552,7 +573,7 @@ export default function BioLensHome() {
                           console.warn('⚠️ Failed to cleanup image:', error)
                         }
                       }
-                      
+
                       // Reset all state
                       setFile(null)
                       setPreview(null)
@@ -573,10 +594,10 @@ export default function BioLensHome() {
                     Analyze Another Image
                   </Button>
                   <Button className="flex-1 h-12 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all duration-300" onClick={() => window.location.href = "https://www.practo.com/search/doctors?results_type=doctor&q=%5B%7B%22word%22%3A%22Dermatologist%22%2C%22autocompleted%22%3Atrue%2C%22category%22%3A%22subspeciality%22%7D%5D&city=Bangalore"}>
-                    
+
                     <Stethoscope className="mr-2 h-5 w-5" />
                     Find Healthcare Providers
-                    
+
                   </Button>
                 </div>
               </>
