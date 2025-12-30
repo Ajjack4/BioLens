@@ -355,7 +355,7 @@ export async function analyzeSkinCondition(
 
     // Try the API call first
     try {
-      const response = await fetch('https://huggingface.co/spaces/Ajjack404/BioLens/run/predict', {
+      const response = await fetch('https://huggingface.co/spaces/Ajjack404/BioLens-Fusion/run/predict', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -510,7 +510,7 @@ export async function POST(request: NextRequest) {
         ? `Patient reports: ${symptoms}. Clinical analysis of skin condition.`
         : 'Clinical dermatological analysis of skin condition'
 
-      const biomedClipResponse = await fetch('https://huggingface.co/spaces/Ajjack404/BioLens/run/predict', {
+      const biomedClipResponse = await fetch('https://huggingface.co/spaces/Ajjack404/BioLens-Fusion/run/predict', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
