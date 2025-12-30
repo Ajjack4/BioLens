@@ -297,40 +297,6 @@ export function ConsultationRegeneration({
           </div>
         </Card>
       )}
-
-      {/* Quick regeneration options */}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onRegenerate(currentSymptoms, 'Requested more detailed recommendations')}
-          disabled={isRegenerating}
-          className="text-xs"
-        >
-          <Plus className="mr-1 h-3 w-3" />
-          More Details
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onRegenerate(currentSymptoms, 'Requested different perspective')}
-          disabled={isRegenerating}
-          className="text-xs"
-        >
-          <RefreshCw className="mr-1 h-3 w-3" />
-          Different View
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onRegenerate(currentSymptoms, 'Requested urgency reassessment')}
-          disabled={isRegenerating}
-          className="text-xs"
-        >
-          <AlertCircle className="mr-1 h-3 w-3" />
-          Check Urgency
-        </Button>
-      </div>
     </div>
   )
 }

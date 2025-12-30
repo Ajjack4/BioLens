@@ -1,16 +1,17 @@
 "use client"
 
+import jsPDF from "jspdf"
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { 
-  Download, 
-  Share2, 
-  FileText, 
-  Mail, 
-  Copy, 
+import {
+  Download,
+  Share2,
+  FileText,
+  Mail,
+  Copy,
   CheckCircle,
   AlertCircle,
   Printer,
@@ -65,10 +66,10 @@ export function ConsultationExport({
   // Generate consultation summary for healthcare providers
   const generateProviderSummary = () => {
     if (!consultation.consultation) return null
-    
+
     const { consultation: consult, metadata } = consultation
     const timestamp = new Date().toLocaleString()
-    
+
     return {
       patientInfo: {
         sessionId,
@@ -101,12 +102,12 @@ export function ConsultationExport({
   // Generate PDF content
   const generatePDFContent = () => {
     if (!consultation.consultation) return ''
-    
+
     const summary = generateProviderSummary()
     if (!summary) return ''
-    
+
     const timestamp = new Date().toLocaleString()
-    
+
     return `
 # BioLens AI Consultation Report
 
@@ -146,12 +147,12 @@ ${summary.additionalInfo.educationalContent}
 ${summary.additionalInfo.providerNotes}
 
 ## Emergency Contacts
-${summary.additionalInfo.emergencyContacts.length > 0 
-  ? summary.additionalInfo.emergencyContacts.map(contact => 
-      `- **${contact.name}** (${contact.type}): ${contact.phone}\n  ${contact.description}`
-    ).join('\n')
-  : 'No emergency contacts provided'
-}
+${summary.additionalInfo.emergencyContacts.length > 0
+        ? summary.additionalInfo.emergencyContacts.map(contact =>
+          `- **${contact.name}** (${contact.type}): ${contact.phone}\n  ${contact.description}`
+        ).join('\n')
+        : 'No emergency contacts provided'
+      }
 
 ## Consultation History
 - **Total Consultations:** ${summary.additionalInfo.consultationHistory}
@@ -168,24 +169,66 @@ ${consultation.consultation?.medicalDisclaimer || 'This is supplementary informa
   // Export as PDF
   const exportAsPDF = async () => {
     setIsExporting(true)
+
     try {
-      // In a real implementation, you would use a PDF generation library like jsPDF or Puppeteer
-      // For now, we'll create a downloadable text file that can be converted to PDF
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      })
+
       const content = generatePDFContent()
-      const blob = new Blob([content], { type: 'text/plain' })
+
+      const marginX = 15
+      let cursorY = 20
+      const pageHeight = doc.internal.pageSize.height
+
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(11)
+
+      const lines = doc.splitTextToSize(content, 180)
+
+      lines.forEach((line: string) => {
+        if (cursorY > pageHeight - 20) {
+          doc.addPage()
+          cursorY = 20
+        }
+        doc.text(line, marginX, cursorY)
+        cursorY += 6
+      })
+
+      doc.save(`biolens-consultation-${sessionId}.pdf`)
+      console.log("✅ PDF exported successfully")
+    } catch (error) {
+      console.error("❌ PDF export failed:", error)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  // Export as Text
+  const exportAsText = async () => {
+    setIsExporting(true)
+
+    try {
+      const content = generatePDFContent()
+
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" })
       const url = URL.createObjectURL(blob)
-      
-      const link = document.createElement('a')
+
+      const link = document.createElement("a")
       link.href = url
-      link.download = `biolens-consultation-${sessionId}-${Date.now()}.txt`
+      link.download = `biolens-consultation-${sessionId}.txt`
+
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+
       URL.revokeObjectURL(url)
-      
-      console.log('✅ Consultation exported as text file')
+
+      console.log("✅ Text file exported successfully")
     } catch (error) {
-      console.error('❌ Export failed:', error)
+      console.error("❌ Text export failed:", error)
     } finally {
       setIsExporting(false)
     }
@@ -208,10 +251,10 @@ ${consultation.consultation?.medicalDisclaimer || 'This is supplementary informa
         consultationHistory,
         providerSummary: generateProviderSummary()
       }
-      
+
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
-      
+
       const link = document.createElement('a')
       link.href = url
       link.download = `biolens-consultation-${sessionId}-${Date.now()}.json`
@@ -219,7 +262,7 @@ ${consultation.consultation?.medicalDisclaimer || 'This is supplementary informa
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
-      
+
       console.log('✅ Consultation exported as JSON')
     } catch (error) {
       console.error('❌ JSON export failed:', error)
@@ -236,7 +279,7 @@ ${consultation.consultation?.medicalDisclaimer || 'This is supplementary informa
       // For now, we'll simulate this with a local implementation
       const linkId = `share-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
-      
+
       const link: ShareableLink = {
         id: linkId,
         url: `${window.location.origin}/shared-consultation/${linkId}`,
@@ -244,7 +287,7 @@ ${consultation.consultation?.medicalDisclaimer || 'This is supplementary informa
         accessCount: 0,
         maxAccess: 10
       }
-      
+
       // Store in localStorage for demo purposes
       const shareData = {
         consultation,
@@ -255,7 +298,7 @@ ${consultation.consultation?.medicalDisclaimer || 'This is supplementary informa
         expiresAt: expiresAt.toISOString()
       }
       localStorage.setItem(`shared-consultation-${linkId}`, JSON.stringify(shareData))
-      
+
       setShareableLink(link)
       console.log('✅ Shareable link generated')
     } catch (error) {
@@ -279,7 +322,7 @@ ${consultation.consultation?.medicalDisclaimer || 'This is supplementary informa
   // Send via email
   const sendViaEmail = async () => {
     if (!emailAddress.trim()) return
-    
+
     setIsSendingEmail(true)
     try {
       // In a real implementation, this would call an API to send the email
@@ -298,7 +341,7 @@ This consultation is for informational purposes only and should not replace prof
 Best regards,
 BioLens Team
       `.trim())
-      
+
       window.open(`mailto:${emailAddress}?subject=${subject}&body=${body}`)
       console.log('✅ Email client opened')
     } catch (error) {
@@ -311,7 +354,7 @@ BioLens Team
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Export Options */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Dialog>
           <DialogTrigger asChild>
             <Button
@@ -322,7 +365,7 @@ BioLens Team
               Export PDF
             </Button>
           </DialogTrigger>
-          
+
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -330,7 +373,7 @@ BioLens Team
                 Export Consultation Report
               </DialogTitle>
             </DialogHeader>
-            
+
             <div className="space-y-6 py-4">
               {/* Provider Notes */}
               <div className="space-y-3">
@@ -386,7 +429,7 @@ BioLens Team
                 <label className="text-sm font-semibold text-foreground">Report Preview:</label>
                 <div className="p-4 bg-muted/50 rounded-lg border max-h-60 overflow-y-auto">
                   <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
-                    {exportFormat === 'json' 
+                    {exportFormat === 'json'
                       ? JSON.stringify(generateProviderSummary(), null, 2).substring(0, 500) + '...'
                       : generatePDFContent().substring(0, 500) + '...'
                     }
@@ -397,7 +440,11 @@ BioLens Team
               {/* Export Actions */}
               <div className="flex gap-3 pt-4 border-t">
                 <Button
-                  onClick={exportFormat === 'json' ? exportAsJSON : exportAsPDF}
+                  onClick={() => {
+                    if (exportFormat === "pdf") exportAsPDF()
+                    else if (exportFormat === "text") exportAsText()
+                    else if (exportFormat === "json") exportAsJSON()
+                  }}
                   disabled={isExporting}
                   className="flex-1"
                 >
@@ -419,16 +466,8 @@ BioLens Team
         </Dialog>
 
         <Dialog>
-          <DialogTrigger asChild>
-            <Button
-              variant="outline"
-              className="h-12 font-semibold border-2 hover:bg-muted/50 transition-all duration-300"
-            >
-              <Share2 className="mr-2 h-5 w-5" />
-              Share Securely
-            </Button>
-          </DialogTrigger>
-          
+
+
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -436,7 +475,7 @@ BioLens Team
                 Share Consultation Securely
               </DialogTitle>
             </DialogHeader>
-            
+
             <div className="space-y-6 py-4">
               {/* Security Notice */}
               <Alert className="bg-amber-50 border-amber-200">
@@ -507,7 +546,7 @@ BioLens Team
                         )}
                       </Button>
                     </div>
-                    
+
                     {copySuccess && (
                       <p className="text-sm text-green-600 flex items-center gap-1">
                         <CheckCircle className="w-3 h-3" />
@@ -582,7 +621,7 @@ BioLens Team
       <Alert className="bg-blue-50 border-blue-200">
         <AlertCircle className="h-4 w-4 text-blue-600" />
         <AlertDescription className="text-blue-800 text-sm">
-          Exported reports include your consultation details, AI analysis, and recommendations. 
+          Exported reports include your consultation details, AI analysis, and recommendations.
           Share only with trusted healthcare providers and follow your local privacy regulations.
         </AlertDescription>
       </Alert>
